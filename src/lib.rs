@@ -49,6 +49,27 @@ impl<T: AsRef<[u8]>> CursorExt for Cursor<T> {
   }
 }
 
+#[derive(Debug)]
+pub enum Main {
+  Editor(Vec<Editor>)
+}
+
+#[derive(Debug)]
+pub enum Editor {
+  Material(Vec<Material>)
+}
+
+#[derive(Debug)]
+pub enum Material {
+  Name(String),
+  TextureMap(Vec<MaterialTextureMap>)
+}
+
+#[derive(Debug)]
+pub enum MaterialTextureMap {
+  Name(String)
+}
+
 impl<'a> Parser3DS<'a> {
   pub fn new(data: &'a mut Cursor<&'a [u8]>) -> Self {
     Parser3DS { data }
@@ -72,7 +93,8 @@ impl<'a> Parser3DS<'a> {
       .unwrap();
   }
 
-  pub fn read_main(&mut self) {
+  pub fn read_main(&mut self) -> Vec<Main> {
+    let mut items = Vec::new();
     let info = self.read_chunk_info();
     debug!("root chunk info: {:?}", info);
     match info.id {
@@ -87,7 +109,7 @@ impl<'a> Parser3DS<'a> {
             }
             MAIN_EDITOR => {
               debug!("scene chunk");
-              self.read_scene(&info);
+              items.push(Main::Editor(self.read_editor(&info)));
               self.seek_to_next_chunk(&info);
             }
             MAIN_KEYFRAMES => {
@@ -100,32 +122,38 @@ impl<'a> Parser3DS<'a> {
       }
       _ => unimplemented!(),
     }
+
+    items
   }
 
-  pub fn read_scene(&mut self, info: &ChunkInfo) {
+  pub fn read_editor(&mut self, info: &ChunkInfo) -> Vec<Editor> {
+    let mut items = Vec::new();
     while self.data.position() < info.get_end() {
       let info = self.read_chunk_info();
-      // debug!("scene chunk info: {:?}", info);
+      // debug!("editor chunk info: {:?}", info);
 
       match info.id {
         EDIT_VERSION => {
-          debug!("scene version: {:?}", info);
+          debug!("editor version: {:?}", info);
           self.seek_to_next_chunk(&info);
         }
         EDIT_MATERIAL => {
-          debug!("material chunk {:?}", info);
-          self.read_material(&info);
+          debug!("editor material {:?}", info);
+          items.push(Editor::Material(self.read_material(&info)));
           self.seek_to_next_chunk(&info);
         }
         _ => {
-          warn!("unknown scene chunk {:?}", info);
+          warn!("unknown editor chunk {:?}", info);
           self.seek_to_next_chunk(&info);
         }
       };
     }
+
+    items
   }
 
-  pub fn read_material(&mut self, info: &ChunkInfo) {
+  pub fn read_material(&mut self, info: &ChunkInfo) -> Vec<Material> {
+    let mut items = Vec::new();
     while self.data.position() < info.get_end() {
       let info = self.read_chunk_info();
       // debug!("material chunk info: {:?}", info);
@@ -137,12 +165,13 @@ impl<'a> Parser3DS<'a> {
           name.pop();
           let name = String::from_utf8(name).unwrap();
           info!("material name: {:?}", name);
+          items.push(Material::Name(name));
 
           self.seek_to_next_chunk(&info);
         }
         MATERIAL_TEXTURE_MAP => {
           info!("material texture map: {:?}", info);
-          self.read_material_texture_map(&info);
+          items.push(Material::TextureMap(self.read_material_texture_map(&info)));
           self.seek_to_next_chunk(&info);
         }
         _ => {
@@ -151,9 +180,12 @@ impl<'a> Parser3DS<'a> {
         }
       }
     }
+
+    items
   }
 
-  pub fn read_material_texture_map(&mut self, info: &ChunkInfo) {
+  pub fn read_material_texture_map(&mut self, info: &ChunkInfo) -> Vec<MaterialTextureMap> {
+    let mut items = Vec::new();
     while self.data.position() < info.get_end() {
       let info = self.read_chunk_info();
       // debug!("material texture map chunk info: {:?}", info);
@@ -165,6 +197,7 @@ impl<'a> Parser3DS<'a> {
           name.pop();
           let name = String::from_utf8(name).unwrap();
           info!("material texture map name: {:?}", name);
+          items.push(MaterialTextureMap::Name(name));
 
           self.seek_to_next_chunk(&info);
         }
@@ -174,6 +207,8 @@ impl<'a> Parser3DS<'a> {
         }
       }
     }
+
+    items
   }
 }
 
@@ -188,6 +223,6 @@ mod tests {
     let data = fs::read("test/tower.3ds").unwrap();
     let mut data = Cursor::new(data.as_slice());
     let mut parser = Parser3DS::new(&mut data);
-    parser.read_main();
+    debug!("{:#?}", parser.read_main());
   }
 }
