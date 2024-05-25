@@ -1,0 +1,11 @@
+[package]
+name = "araumi-3ds"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+byteorder = "1.5.0"
+tracing = "0.1.40"
+
+[dev-dependencies]
+test-log = { version = "0.2.16", features = ["trace"] }
